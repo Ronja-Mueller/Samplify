@@ -129,7 +129,7 @@ samplify.py <directory> [rf_model_path] [--segmentation-only]
 
 **Optional:**
 
-- `<rf_model_path>`: Path to the Random Forest model (default: `rf_H_old.pkl`).
+- `<rf_model_path>`: Path to the Random Forest model (default: `TripBlockDefault_RF.pkl`).
 - `--segmentation-only`: Run segmentation without classification.
 
 ### **Examples**
