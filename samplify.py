@@ -1008,7 +1008,7 @@ def main():
     
     parser = argparse.ArgumentParser(description="Process seed images and perform segmentation and/or classification.")
     parser.add_argument("directory", help="Directory containing images to process.")
-    parser.add_argument("--rf_model_path", default = '~/rf_H_old.pkl', help="Path to the Random Forest model.")
+    parser.add_argument("--rf_model_path", default = '~/TripBlockDefault_RF.pkl', help="Path to the Random Forest model.")
     parser.add_argument("--segmentation-only", action="store_true", 
                         help="If set, only segmentation will be performed without classification or summary.")
     
