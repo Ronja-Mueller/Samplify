@@ -863,6 +863,8 @@ def regenerate_summary_from_parameters(csv_path, selected_features):
         row["%Normal"] = round(row["Normal"] / total * 100, 2)
         row["%Partially"] = round(row["Partially"] / total * 100, 2)
         row["%Aborted"] = round(row["Aborted"] / total * 100, 2)
+        row["%High Confidence Prediction (>0.7)"] = len(group[group['Predicted Probability']>0.7]) / total * 100
+        row["Avg. Prediction Confidence (%)"] = group['Predicted Probability'].mean() * 100
 
         if selected_features:
             for feat in selected_features:
@@ -894,48 +896,77 @@ def regenerate_summary_from_parameters(csv_path, selected_features):
 
     print(f"\nRegenerated summary saved to: {summary_path}")
 
-def prompt_feature_selection(sample_csv_path=None):
-    # Load a small sample CSV to extract feature names
-    if sample_csv_path:
-        df = pd.read_csv(sample_csv_path)
-    else:
-        # If sample doesn't exist, prompt user to skip selection
-        print("No data available for feature selection. \Summary will be generated without selected features. \n Retry after analysis with --regenerate-summary flag.")
-        return None
-
-    all_features = df.select_dtypes(include='number').columns.tolist()
-
-    if not all_features:
-        print("No numeric features found.")
-        return None
+def prompt_feature_selection():
+    default_features = [
+        "Area",
+        "Perimeter",
+        "Hull Perimeter",
+        "Mean Gray",
+        "Parameter",
+        "Solidity",
+        "Eccentricity",
+        "Overlap Ratio",
+        "Circularity",
+        "Fourier Energy",
+        "Haralick Contrast",
+        "Haralick Energy",
+        "Haralick Homogeneity",
+        "Haralick Correlation",
+        "Mean Red",
+        "Mean Green",
+        "Mean Blue",
+        "Min Red",
+        "Min Green",
+        "Min Blue",
+        "Max Red",
+        "Max Green",
+        "Max Blue",
+        "Color Moment Mean Red",
+        "Color Moment Mean Green",
+        "Color Moment Mean Blue",
+        "Color Moment Variance Red",
+        "Color Moment Variance Green",
+        "Color Moment Variance Blue",
+        "Color Moment Skewness Red",
+        "Color Moment Skewness Green",
+        "Color Moment Skewness Blue",
+        "Mean Intensity Along Contour",
+        "Variance Intensity Along Contour",
+        "Predicted Probability"
+    ]
 
     print("\nAvailable Features for Summary:\n")
-    for i, feat in enumerate(all_features, start=1):
-        print(f"  {i}. {feat}")
+    for idx, feat in enumerate(default_features, 1):
+        print(f"  {idx}. {feat}")
 
-    choices = input("\nEnter numbers of features to include (comma-separated), or press Enter to skip: ").strip()
+    selection = input(
+        "\nEnter numbers of features to include (comma-separated), "
+        "or press Enter to skip and select None: "
+    ).strip()
 
-    if not choices:
+    if not selection:
         selected = None
-        return selected
-
-    try:
-        selected_indexes = [int(x) - 1 for x in choices.split(",") if x.strip().isdigit()]
-        selected = [all_features[i] for i in selected_indexes if 0 <= i < len(all_features)]
-    except Exception as e:
-        print(f"Invalid input. Error: {e}")
-        return all_features
+    else:
+        try:
+            selected_indexes = [int(i.strip()) - 1 for i in selection.split(',')]
+            selected = [default_features[i] for i in selected_indexes if 0 <= i < len(default_features)]
+        except Exception as e:
+            print(f"Invalid input: {e}")
+            selected = None
 
     print("\nSelected Features:")
-    print(", ".join(selected))
-    confirm = input("Proceed with these? (y/n): ").strip().lower()
+    for feat in selected:
+        print(f" - {feat}")
+
+    confirm = input("\nProceed with these features? (y/n): ").strip().lower()
     if confirm != 'y':
         print("Process aborted by user.")
         sys.exit(0)
 
     return selected
+
     
-def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segmentation_only=False):
+def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segmentation_only=False, selected_features=None):
     start = time.time()
     input_folder_name = os.path.basename(input_folder)
     print(f"Input folder: {input_folder_name}")
@@ -1010,16 +1041,6 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
                 features_df = pd.DataFrame(seed_features)
                 features_df.insert(0, "Image Name", image_name)
                 all_parameters.append(features_df)
-
-                try:
-                    all_parameters_df = pd.concat(all_parameters, ignore_index=True)
-                    all_parameters_df.sort_values(by="Image Name", ascending=True, inplace=True)
-                    all_parameters_path = os.path.join(output_folder, f"seed_parameters_{input_folder_name}.csv")
-                    all_parameters_df.to_csv(all_parameters_path, index=False)
-                    print(f"\nParameters saved to {all_parameters_path}.")
-                except Exception as e:
-                    print(f"Error saving parameters to CSV: {e}")
-                    print("Error details:", traceback.format_exc())
                 
             else:
                 seed_features = predict_labels_with_random_forest(seed_features, model)
@@ -1028,16 +1049,6 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
                 # Save individual image parameters
                 features_df.insert(0, "Image Name", image_name)
                 all_parameters.append(features_df)
-
-                try:
-                    all_parameters_df = pd.concat(all_parameters, ignore_index=True)
-                    all_parameters_df.sort_values(by="Image Name", ascending=True, inplace=True)
-                    all_parameters_path = os.path.join(output_folder, f"seed_parameters_{input_folder_name}.csv")
-                    all_parameters_df.to_csv(all_parameters_path, index=False)
-                    print(f"\nParameters saved to {all_parameters_path}.")
-                except Exception as e:
-                    print(f"Error saving parameters to CSV: {e}")
-                    print("Error details:", traceback.format_exc())
     
                 # Summarize seed counts
                 label_counts = features_df["Predicted Label"].value_counts()
@@ -1062,7 +1073,6 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
                     "Execution Time (s)": round(execution,2)
                 }
                 # Add selected numerical features
-                selected_features = prompt_feature_selection(sample_csv_path=all_parameters_path)
                 if selected_features:
                     for feat in selected_features:
                         if feat in features_df.columns:
@@ -1092,7 +1102,17 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
             print(f"Error processing image {image_name}: {e}")
             print("Error details:", traceback.format_exc())
             continue  
-    
+            
+    try:
+        all_parameters_df = pd.concat(all_parameters, ignore_index=True)
+        all_parameters_df.sort_values(by="Image Name", ascending=True, inplace=True)
+        all_parameters_path = os.path.join(output_folder, f"seed_parameters_{input_folder_name}.csv")
+        all_parameters_df.to_csv(all_parameters_path, index=False)
+        print(f"\nParameters saved to {all_parameters_path}.")
+    except Exception as e:
+        print(f"Error saving parameters to CSV: {e}")
+        print("Error details:", traceback.format_exc())
+        
     if not segmentation_only:
         try:
             summary_df = pd.DataFrame(summary)
@@ -1157,13 +1177,15 @@ def main():
         if not param_csv:
             raise FileNotFoundError("No seed_parameters CSV found in the 'out' directory.")
         param_csv_path = param_csv[0]
-        selected_features = prompt_feature_selection(param_csv_path)
+        selected_features = prompt_feature_selection()
         regenerate_summary_from_parameters(param_csv_path, selected_features)
         sys.exit(0)
         
     if not os.path.isdir(args.directory):
         raise ValueError(f"Directory '{args.directory}' does not exist!")
     output_folder = os.path.join(args.directory, "out")
+
+    selected_features = prompt_feature_selection()
         
     print(f"Processing directory: {args.directory}")
     print(f"with random forest model: {rf_model_path}")
@@ -1182,7 +1204,7 @@ def main():
     torch.cuda.empty_cache()
     
     classify_seeds_in_folder(input_folder=args.directory, output_folder=output_folder, 
-                             rf_model_path=rf_model_path, segmentation_only=args.segmentation_only)
+                             rf_model_path=rf_model_path, segmentation_only=args.segmentation_only, selected_features=selected_features)
 
     message = (
         "\n\033[1;32mImage processing completed! Results are saved in the 'out' folder.\n\033[0m "
