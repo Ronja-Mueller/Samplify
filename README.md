@@ -118,7 +118,7 @@ scp -r username@vector:/remote/path/images/out /local/path/output_files
 ## Samplify Command-Line Prompts 
 
 ```bash
-samplify.py <directory> [rf_model_path] [--segmentation-only]
+samplify.py <directory> [rf_model_path] [--segmentation-only] [--regenerate-summary]
 ```
 
 ### **Arguments**
@@ -131,6 +131,8 @@ samplify.py <directory> [rf_model_path] [--segmentation-only]
 
 - `<rf_model_path>`: Path to the Random Forest model (default: `TripBlockDefault_RF.pkl`).
 - `--segmentation-only`: Run segmentation without classification.
+- --regenerate-summary: Skip image analysis and regenerate a .xlsx summary from an existing seed_parameters_*.csv file in the given 'out' directory.
+This avoids reprocessing images.
 
 ### **Examples**
 
@@ -144,6 +146,11 @@ samplify.py /remote/path/to/images /path/to/your/rf_model.pkl
 
 ```bash
 samplify.py /remote/path/to/images --segmentation-only
+```
+
+#### Regenerate Summary from previous runs:
+```bash
+samplify.py /remote/path/to/out --regenerate-summary
 ```
 
 ### **Input Requirements**
