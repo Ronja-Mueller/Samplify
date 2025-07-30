@@ -43,6 +43,9 @@ from scipy.fftpack import fft
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 import warnings
+from openpyxl import load_workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+from datetime import datetime
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn.utils.validation")
 
 
@@ -842,6 +845,95 @@ def resize_image_oom(image, max_side_length=5000):
     else:
         print(f"Failed to resize image, not bigger than max side length {max_side_length}")
         return image
+
+def regenerate_summary_from_parameters(csv_path, selected_features):
+
+    df = pd.read_csv(csv_path)
+    summary = []
+
+    for image_name, group in df.groupby("Image Name"):
+        row = {
+            "Image Name": image_name,
+            "Total": len(group),
+            "Normal": (group["Predicted Label"] == "Normal").sum(),
+            "Partially": (group["Predicted Label"] == "Partially").sum(),
+            "Aborted": (group["Predicted Label"] == "Aborted").sum(),
+        }
+        total = row["Total"]
+        row["%Normal"] = round(row["Normal"] / total * 100, 2)
+        row["%Partially"] = round(row["Partially"] / total * 100, 2)
+        row["%Aborted"] = round(row["Aborted"] / total * 100, 2)
+
+        if selected_features:
+            for feat in selected_features:
+                if feat in group.columns:
+                    row[f"Mean {feat}"] = round(group[feat].mean(), 2)
+                else:
+                    print(f"Feature '{feat}' not found.")
+
+        summary.append(row)
+
+    summary_df = pd.DataFrame(summary)
+    summary_path = csv_path.replace("parameters", "summary_regenerated").replace(".csv", ".xlsx")
+    summary_df.to_excel(summary_path, index=False)
+
+    # Add metadata
+    try:
+        wb = load_workbook(summary_path)
+        ws = wb.create_sheet(title="Metadata_Regenerated", index=0)
+        metadata = {
+            "Source CSV": csv_path,
+            "Run Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Selected Features": ", ".join(selected_features) if selected_features else "All numeric"
+        }
+        for k, v in metadata.items():
+            ws.append([k, str(v)])
+        wb.save(summary_path)
+    except Exception as e:
+        print(f"Metadata write failed: {e}")
+
+    print(f"\nRegenerated summary saved to: {summary_path}")
+
+def prompt_feature_selection(sample_csv_path=None):
+    # Load a small sample CSV to extract feature names
+    if sample_csv_path:
+        df = pd.read_csv(sample_csv_path)
+    else:
+        # If sample doesn't exist, prompt user to skip selection
+        print("No data available for feature selection. \Summary will be generated without selected features. \n Retry after analysis with --regenerate-summary flag.")
+        return None
+
+    all_features = df.select_dtypes(include='number').columns.tolist()
+
+    if not all_features:
+        print("No numeric features found.")
+        return None
+
+    print("\nAvailable Features for Summary:\n")
+    for i, feat in enumerate(all_features, start=1):
+        print(f"  {i}. {feat}")
+
+    choices = input("\nEnter numbers of features to include (comma-separated), or press Enter to skip: ").strip()
+
+    if not choices:
+        selected = None
+        return selected
+
+    try:
+        selected_indexes = [int(x) - 1 for x in choices.split(",") if x.strip().isdigit()]
+        selected = [all_features[i] for i in selected_indexes if 0 <= i < len(all_features)]
+    except Exception as e:
+        print(f"Invalid input. Error: {e}")
+        return all_features
+
+    print("\nSelected Features:")
+    print(", ".join(selected))
+    confirm = input("Proceed with these? (y/n): ").strip().lower()
+    if confirm != 'y':
+        print("Process aborted by user.")
+        sys.exit(0)
+
+    return selected
     
 def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segmentation_only=False):
     start = time.time()
@@ -918,6 +1010,16 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
                 features_df = pd.DataFrame(seed_features)
                 features_df.insert(0, "Image Name", image_name)
                 all_parameters.append(features_df)
+
+                try:
+                    all_parameters_df = pd.concat(all_parameters, ignore_index=True)
+                    all_parameters_df.sort_values(by="Image Name", ascending=True, inplace=True)
+                    all_parameters_path = os.path.join(output_folder, f"seed_parameters_{input_folder_name}.csv")
+                    all_parameters_df.to_csv(all_parameters_path, index=False)
+                    print(f"\nParameters saved to {all_parameters_path}.")
+                except Exception as e:
+                    print(f"Error saving parameters to CSV: {e}")
+                    print("Error details:", traceback.format_exc())
                 
             else:
                 seed_features = predict_labels_with_random_forest(seed_features, model)
@@ -926,6 +1028,16 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
                 # Save individual image parameters
                 features_df.insert(0, "Image Name", image_name)
                 all_parameters.append(features_df)
+
+                try:
+                    all_parameters_df = pd.concat(all_parameters, ignore_index=True)
+                    all_parameters_df.sort_values(by="Image Name", ascending=True, inplace=True)
+                    all_parameters_path = os.path.join(output_folder, f"seed_parameters_{input_folder_name}.csv")
+                    all_parameters_df.to_csv(all_parameters_path, index=False)
+                    print(f"\nParameters saved to {all_parameters_path}.")
+                except Exception as e:
+                    print(f"Error saving parameters to CSV: {e}")
+                    print("Error details:", traceback.format_exc())
     
                 # Summarize seed counts
                 label_counts = features_df["Predicted Label"].value_counts()
@@ -933,12 +1045,10 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
                 normal = label_counts.get("Normal", 0) / total * 100
                 partially = label_counts.get("Partially", 0) / total * 100
                 aborted = label_counts.get("Aborted", 0) / total * 100
-                mean_area = features_df["Area"].mean()
-                mean_gray = features_df["Mean Gray"].mean()
                 confidence = len(features_df[features_df['Predicted Probability']>0.7]) / total * 100
                 avg_conf = features_df['Predicted Probability'].mean() * 100
                 execution = time.time() - start_image 
-                summary.append({
+                row = {
                     "Image Name": image_name,
                     "Total": len(features_df),
                     "Normal": label_counts.get("Normal", 0),
@@ -947,12 +1057,20 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
                     "%Normal": round(normal, 2),
                     "%Partially": round(partially, 2),
                     "%Aborted": round(aborted, 2),
-                    "Mean Area (pixel value)": round(mean_area,2),
-                    "Mean Gray [0-black,1-white]": round(mean_gray,2),
                     "%High Confidence Prediction(>0.7)": round(confidence,2),
                     "Avg. Prediction Confidence (%)": round(avg_conf,2),
                     "Execution Time (s)": round(execution,2)
-                })
+                }
+                # Add selected numerical features
+                selected_features = prompt_feature_selection(sample_csv_path=all_parameters_path)
+                if selected_features:
+                    for feat in selected_features:
+                        if feat in features_df.columns:
+                            row[f"Mean {feat}"] = round(features_df[feat].mean(), 2)
+                        else:
+                            print(f"Warning: Feature '{feat}' not found in DataFrame.")
+
+                summary.append(row)
                 
                 # Save the image with segmentation and prediction contours
                 output_image = plot_contours_with_probabilities(
@@ -974,16 +1092,6 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
             print(f"Error processing image {image_name}: {e}")
             print("Error details:", traceback.format_exc())
             continue  
-
-    try:
-        all_parameters_df = pd.concat(all_parameters, ignore_index=True)
-        all_parameters_df.sort_values(by="Image Name", ascending=True, inplace=True)
-        all_parameters_path = os.path.join(output_folder, f"seed_parameters_{input_folder_name}.csv")
-        all_parameters_df.to_csv(all_parameters_path, index=False)
-        print(f"\nParameters saved to {all_parameters_path}.")
-    except Exception as e:
-        print(f"Error saving parameters to CSV: {e}")
-        print("Error details:", traceback.format_exc())
     
     if not segmentation_only:
         try:
@@ -994,6 +1102,29 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
             summary_path = os.path.join(output_folder, f"seed_summary_{input_folder_name}.xlsx")
             summary_df.to_excel(summary_path, index=False)
             print(f"Summary saved to {summary_path}.")
+
+            # Save summary with metadata
+            summary_path = os.path.join(output_folder, f"seed_summary_{input_folder_name}.xlsx")
+            summary_df.to_excel(summary_path, index=False)
+            
+            # Add metadata
+            metadata = {
+                "Random Forest Model": rf_model_path,
+                "Run Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "Segmentation Only": segmentation_only,
+                "Selected Features": ", ".join(selected_features) if selected_features else None,
+                "Total Images Processed": num_images
+            }
+            
+            try:
+                wb = load_workbook(summary_path)
+                ws = wb.create_sheet(title="Metadata", index=0)
+                for key, value in metadata.items():
+                    ws.append([key, str(value)])
+                wb.save(summary_path)
+                print(f"Summary with metadata saved to {summary_path}.")
+            except Exception as e:
+                print(f"Failed to write metadata: {e}")
         except Exception as e:
             print(f"Error saving summary to Excel: {e}")
             print("Error details:", traceback.format_exc())
@@ -1011,16 +1142,31 @@ def main():
     parser.add_argument("--rf_model_path", default = '~/TripBlockDefault_RF.pkl', help="Path to the Random Forest model.")
     parser.add_argument("--segmentation-only", action="store_true", 
                         help="If set, only segmentation will be performed without classification or summary.")
+    parser.add_argument("--regenerate-summary", action="store_true", help="Regenerate summary from existing CSV.")
+    parser.add_argument("--features", type=str, help="Comma-separated list of feature names to include in summary.")
     
     args = parser.parse_args()
     
+    selected_features = [f.strip() for f in args.features.split(',')] if args.features else None
     rf_model_path = os.path.expanduser(args.rf_model_path)
+
+    param_csv_path = None
+
+    if args.regenerate_summary:
+        param_csv = glob(os.path.join(args.directory, "out/seed_parameters_*.csv"))
+        if not param_csv:
+            raise FileNotFoundError("No seed_parameters CSV found in the 'out' directory.")
+        param_csv_path = param_csv[0]
+        selected_features = prompt_feature_selection(param_csv_path)
+        regenerate_summary_from_parameters(param_csv_path, selected_features)
+        sys.exit(0)
+        
     if not os.path.isdir(args.directory):
         raise ValueError(f"Directory '{args.directory}' does not exist!")
     output_folder = os.path.join(args.directory, "out")
         
     print(f"Processing directory: {args.directory}")
-    print(f"with random forest model: {rf_model_path}") 
+    print(f"with random forest model: {rf_model_path}")
     if args.segmentation_only:
         print("In segmentation mode only (no classification or summary)")
         
