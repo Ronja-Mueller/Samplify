@@ -24,61 +24,33 @@ Samplify provides two modes:
 
 ---
 
+## Prerequisites
+Install SAM2 by following the guide on Github: https://github.com/facebookresearch/sam2
+GPU capacities for computing
+
 ## Usage Guide
 
-### Running Samplify on Vector
-
-To process seed images, users interact with the **GPU server vectore** via the command-line interface. Follow these steps:
-
-**1. Upload Image Data to Vector**
-
-Transfer seed images from your local machine to the Vector server:
-
-- Windows Users: Open Command Prompt (`Win + R`, type `cmd`, press `Enter`).
-
-- macOS/Linux Users: Open Terminal.
+1. Clone this repository
 
 ```bash
-scp -r /local/path/to/images username@vector:/remote/path/
+git clone https://github.com/Ronja-Mueller/Samplify
 ```
 
-- Enter your password when prompted.
-
-*Alternatively, Windows users can use WinSCP (Host: **`vector`**).*
-
-**2. Connect to Vector**
-
-- Connect via SSH. In your Command Prompt/Terminal type:
+2. Load Required Modules
 
 ```bash
-ssh vector
+pip install numpy pandas cv2 skimage sklearn joblib matplotlib torch tqdm
 ```
 
-- Confirm the connection (`yes`).
-- Enter your password when prompted.
-
-
-
-**3. Load Required Modules**
-
-```bash
-module load biotools/Samplify
-```
-
-**4. Start a Screen Session**
+3. Start a screen session
 
 ```bash
 screen -S samplify_session
 ```
-
-*This creates a virtual terminal session to keep processes running in the background.*
-
-**5. Run Samplify**
-
-Execute the script: (for more details see next section)
+4. Run Samplify
 
 ```bash
-samplify.py /remote/path/to/images
+samplify.py image_folder
 ```
 
 - Wait for the estimated execution time, displayed in red (can take up to **5 minutes**).
@@ -86,32 +58,17 @@ samplify.py /remote/path/to/images
   ```bash
   Ctrl + a + d
   ```
-- Log out: `exit`
 
-**6. Check Progress**
-
-- Reconnect to Vector (`Step 1`).
+5. Check Progress
+   
 - Reattach to the session:
   ```bash
   screen -r samplify_session
   ```
-- If the program is still running, detach (`Step 5`). Only if finished, exit:
-  ```bash
-  exit
-  ```
-- Log out: `exit`
 
-**7. Retrieve Output**
+**Retrieve Output**
 
-Processed files are stored in the `out` subdirectory:
-
-```bash
-scp -r username@vector:/remote/path/images/out /local/path/output_files
-```
-
-**8. Cleanup**
-
-- Delete unnecessary files from Vector.
+Processed files are stored in the `out` subdirectory of the image_folder
 
 ---
 
@@ -125,13 +82,13 @@ samplify.py <directory> [rf_model_path] [--segmentation-only] [--regenerate-summ
 
 **Mandatory:**
 
-- `<directory>`: Path to images on vector.
+- `<directory>`: Path to images
 
 **Optional:**
 
 - `<rf_model_path>`: Path to the Random Forest model (default: `TripBlockDefault_RF.pkl`).
 - `--segmentation-only`: Run segmentation without classification.
-- --regenerate-summary: Skip image analysis and regenerate a .xlsx summary from an existing seed_parameters_*.csv file in the given 'out' directory.
+- `--regenerate-summary`: Skip image analysis and regenerate a .xlsx summary from an existing seed_parameters_*.csv file in the given 'out' directory.
 This avoids reprocessing images.
 
 ### **Examples**
@@ -139,7 +96,7 @@ This avoids reprocessing images.
 #### Full Segmentation & Classification with your own RF
 
 ```bash
-samplify.py /remote/path/to/images /path/to/your/rf_model.pkl
+samplify.py /path/to/images /path/to/your/rf_model.pkl
 ```
 
 #### Segmentation-Only:
@@ -150,7 +107,7 @@ samplify.py /remote/path/to/images --segmentation-only
 
 #### Regenerate Summary from previous runs:
 ```bash
-samplify.py /remote/path/to/out --regenerate-summary
+samplify.py /path/to/out --regenerate-summary
 ```
 
 ### **Input Requirements**
@@ -159,13 +116,16 @@ samplify.py /remote/path/to/out --regenerate-summary
 - Your own **Random Forest**: Trained with the rf_pipeline.py (described below) to ensure feature consistency.
 
 ### **Output Files**
-All files are stored in a newly created `out` directory in your /remote/path/to/images directory.
+All files are stored in a newly created `out` directory in your /path/to/images directory.
 
 | File Type             | Description                                                                          |
 | --------------------- | ------------------------------------------------------------------------------------ |
 | `predicted_images/`   | Directory containing the processed images with contours (if classification enabled). |
 | `seed_parameters.csv` | CSV file with seed parameters and classification results.                            |
 | `seed_summary.xlsx`   | Image-wise summary of classification performance.                                    |
+
+### Examplatory image with contours
+![Predicted Image with Contours](predicted_image.jpg)
 
 ---
 
@@ -192,15 +152,7 @@ Run Samplify in segmentation-only mode to extract seed features for your train (
 - Check naming convention: label information of `image123.jpg` should be found in `image123.txt`
 - Summarize all `.txt`files of all your train (and test) images in one directory /path/to/labels
 
-**3. Upload data on vector**
-Check the samplify documentation to get instructions how to upload data on vector via `scp` or `WinSCP`. If not already on vector, upload the `seed_parameters.csv` file you generated with samplify. Upload the directory /path/to/labels with all the labels.
-
-```bash
-scp -r /local/path/to/labels username@vector:/remote/path/to/labels
-```
-
-**4. Train the Model**
-Connect to vector via ssh and load the samplify module (check the instructions of samplify above for more details).
+**Train the RF Model**
 
 Run the training script.
 
@@ -216,8 +168,8 @@ rf_pipeline.py <train_file> [--label_dir LABEL_DIR] [--test_dir TEST_DIR] [--out
 
 **Optional:**
 
-- `--label_dir`: Directory containing label TXT files for training and testing data.
-- `--test_dir`: Directory with test datasets (file ending `.csv`).
+- `--label_dir`: Directory containing label TXT files for each unlabeled image of training and testing data.
+- `--test_dir`: Directory with 1 or more test datasets (file ending `.csv`).
 - `--output_dir`: Directory for the trained model. Default: `rf_training_output`.
 
 #### **Example**
@@ -235,17 +187,6 @@ rf_pipeline.py path/to/seed_parameters.csv --test_dir path/to/test_datasets/ --l
 ```
 
 *Answer all the questions prompted by the program to ensure correct training documentation. Please also read the Standard Image Acquisition Protocol at the end of this file.*
-
-### **Input Requirements**
-
-**Mandatory:**
-
-- Training file: `.csv`
-
-**Optional:**
-
-- Test Directory, containing 1 or more `.csv` testing files
-- Label Directory, containing `.txt` files for each unlabeled image (train and test datasets)
 
 ### **Output Files**
 
