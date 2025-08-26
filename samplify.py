@@ -1154,13 +1154,12 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
 
 def main():
     if not os.getenv("STY"):  # "STY" is only set inside a screen session
-        print(f"Not in a screen session. Please run this inside a screen session.")
-        sys.exit(0)
+        print(f"It is recommended to run this inside a screen session.")
     
     parser = argparse.ArgumentParser(description="Process seed images and perform segmentation and/or classification.")
     parser.add_argument("directory", help="Directory containing images to process.")
-    parser.add_argument("--rf_model_path", default = '~/TripBlockDefault_RF.pkl', help="Path to the Random Forest model.")
-    parser.add_argument("--segmentation-only", action="store_true", 
+    parser.add_argument("--rf_model_path", default = f"{os.path.dirname(__file__)}/TripBlockDefault_RF.pkl", help="Path to the Random Forest model.")
+    parser.add_argument("--segmentation-only", action="store_true",
                         help="If set, only segmentation will be performed without classification or summary.")
     parser.add_argument("--regenerate-summary", action="store_true", help="Regenerate summary from existing CSV.")
     parser.add_argument("--features", type=str, help="Comma-separated list of feature names to include in summary.")
