@@ -81,11 +81,25 @@ def start_env():
     
     from sam2.build_sam import build_sam2
     from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-    sam2_checkpoint = "../checkpoints/sam2.1_hiera_large.pt"
+    sam2_checkpoint = "checkpoints/sam2.1_hiera_large.pt"
     model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
     
-    sam2 = build_sam2(model_cfg, sam2_checkpoint, device=device, apply_postprocessing=False)
-    
+    try:
+        sam2 = build_sam2(model_cfg, sam2_checkpoint, device=device, apply_postprocessing=False)
+    except Exception as e:
+        print(e)
+        print("\nRetrying to build environment with path to checkpoints:\n")
+        sam2_checkpoint2 = "../sam2/checkpoints/sam2.1_hiera_large.pt"
+        print(sam2_checkpoint2)
+        try:
+            sam2 = build_sam2(model_cfg, sam2_checkpoint2, device=device, apply_postprocessing=False)
+        except Exception as e:
+            print("\n", e)
+            sam2_checkpoint3 = input("\nPlease enter custom path to your sam2 checkpoints: \n")
+            try:
+                sam2 = build_sam2(model_cfg, sam2_checkpoint3, device=device, apply_postprocessing=False)
+            except Exception as e:
+                print(f"\nCould not build sam2. Checkpoints not found. Error: {e}")
     
     # In[5]:
     
