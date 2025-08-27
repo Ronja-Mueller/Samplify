@@ -25,32 +25,81 @@ Samplify provides two modes:
 ---
 
 ## Prerequisites
+- Make sure to have a GPU with the needed Compute Capabilities (CC) at your disposal. 
+In the Python3 (torch) versions we used, we needed at least 7.0.
+For a detailed overview check: https://developer.nvidia.com/cuda-gpus.
+We were able to run our setup on a NVida V100 (7.0)  and a RTX 4070 (8.9),
+it failed on a RTX 1080 (6.1) though...
+
+- Python >= 3.10
+- a working SAM2 installation (see section [Installation](#installation))
+
+**Note:** We used Ubuntu 22.04 LTS for our installation but any modern Linux distro providing
+Python3 should be fine.
+
+## Installation
+
+Create a fresh directory in you linux home:
+```
+cd
+mkdir mysamp
+cd mysamp
+```
+
+Create a fresh Python3 virtual environment called `samplyenv`
+```
+python3 -m venv ~/mysamp/samplyenv
+```
+
+Activate the new environment
+```
+source samplyenv/bin/activate
+```
+(Your prompt should now indicate that you are in the new environment as it is prefixing your promt in brakets like
+`(sampleyenv) user@hostname:~/mysamp$` )
+
 Install SAM2 by following the guide on Github: https://github.com/facebookresearch/sam2
-GPU capacities for computing
+```
+git clone https://github.com/facebookresearch/sam2.git 
+cd sam2
+pip install -e .
+```
+**Note:** You can check you are using the pip version of you newly created venv by typing `which pip`, it should
+live in your `~/mysamp/samplyenv/` directory.
 
-## Usage Guide
+Download and link to the SAM2 checkpoints
+```
+cd checkpoints
+./download_ckpts.sh
+cd ~/mysamp
+ln -s sam2/checkpoints/ .
+```
 
-1. Clone this repository
-
+Clone this repository ( you should stay in ~/mysamp )
 ```bash
 git clone https://github.com/Ronja-Mueller/Samplify
 ```
 
-2. Load Required Modules
+Install additional python packages 
 
 ```bash
-pip install numpy pandas cv2 skimage sklearn joblib matplotlib torch tqdm
+pip install numpy pandas joblib torch tqdm matplotlib opencv-python scikit-image scikit-learn openpyxl
 ```
 
-3. Start a screen session
-
+Start a SCREEN session (optional but recommended)
 ```bash
 screen -S samplify_session
 ```
-4. Run Samplify
+Change permissions for the application 
+```
+cd Samplify
+chmod 755 samplify.py
+```
+
+Run the example
 
 ```bash
-samplify.py image_folder
+./samplify.py image_folder
 ```
 
 - Wait for the estimated execution time, displayed in red (can take up to **5 minutes**).
@@ -58,10 +107,7 @@ samplify.py image_folder
   ```bash
   Ctrl + a + d
   ```
-
-5. Check Progress
-   
-- Reattach to the session:
+- Check progress by retaching to the session:
   ```bash
   screen -r samplify_session
   ```
@@ -146,11 +192,11 @@ Run Samplify in segmentation-only mode to extract seed features for your train (
 - Open ImageJ and label all train (and test) images manually with the "Multi-point"-Tool.
 - Prepare the labeling information for the script by extracting text files:
   - In ImageJ click: Plugins > Macros > Run
-  - Select `Macro_save_labels.ijm` (downloaded beforehand)
-    - Select your image directory containing all you labeled tiff files
+  - Select `Macro_save_labels.ijm` (downloaded from this repo beforehand)
+    - Select your image directory containing all your labeled tiff files
     - The macro saves all `.txt` files in a new `TXT` directory in your image directory.
 - Check naming convention: label information of `image123.jpg` should be found in `image123.txt`
-- Summarize all `.txt`files of all your train (and test) images in one directory /path/to/labels
+- Summarize all `.txt`files of all your train (and test) images in one directory `/path/to/labels`
 
 **Train the RF Model**
 
@@ -232,13 +278,11 @@ To ensure high-quality segmentation and classification, follow this imaging prot
 - Use machine-readable names, e.g., `xhb938.jpg`.
 
 By following these standards, image quality is optimized, improving segmentation and classification accuracy. Images should look like this:
-![Standardized Seed Image](standard_img.jpg)
+![Standardized Seed Image](images_folder/img1.jpg)
 
 ---
 
 ## Credits
 
-Developed in collaboration with **Prof. Dirk Walther** (Ag Bioinformatcs, MPI) and **Dr. Heinrich Bente** (AG Köhler, MPI).
-
-For questions or support, contact: Ronja Müller, ronja_mueller@gmx.net
+Developed in collaboration with **Prof. Dirk Walther** (AG Bioinformatcs, MPI) and **Dr. Heinrich Bente** (AG Köhler, MPI).
 
