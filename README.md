@@ -56,7 +56,7 @@ Activate the new environment
 source samplyenv/bin/activate
 ```
 (Your prompt should now indicate that you are in the new environment as it is prefixing your promt in brakets like
-`(sampleyenv) user@hostname:~/mysamp$` )
+`(samplyenv) user@hostname:~/mysamp$` )
 
 Install SAM2 by following the guide on Github: https://github.com/facebookresearch/sam2
 ```
@@ -92,7 +92,7 @@ screen -S samplify_session
 ```
 Change permissions for the application 
 ```
-cd Samplify
+cd ~/mysamp
 chmod 755 samplify.py
 ```
 
@@ -103,14 +103,8 @@ Run the example
 ```
 
 - Wait for the estimated execution time, displayed in red (can take up to **5 minutes**).
-- To detach the session and keep it running in the background, press:
-  ```bash
-  Ctrl + a + d
-  ```
-- Check progress by retaching to the session:
-  ```bash
-  screen -r samplify_session
-  ```
+- To detach the session and keep it running in the background, press: `Ctrl + a + d`
+- Check progress by retaching to the session: `screen -r samplify_session`
 
 **Retrieve Output**
 
@@ -192,7 +186,7 @@ Run Samplify in segmentation-only mode to extract seed features for your train (
 - Open ImageJ and label all train (and test) images manually with the "Multi-point"-Tool.
 - Prepare the labeling information for the script by extracting text files:
   - In ImageJ click: Plugins > Macros > Run
-  - Select `Macro_save_labels.ijm` (downloaded from this repo beforehand)
+  - Select `Macro_save_labels.ijm` (downloaded [here](https://github.com/Ronja-Mueller/Samplify/blob/main/Macro_save_labels.ijm) from this repo beforehand)
     - Select your image directory containing all your labeled tiff files
     - The macro saves all `.txt` files in a new `TXT` directory in your image directory.
 - Check naming convention: label information of `image123.jpg` should be found in `image123.txt`
