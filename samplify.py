@@ -81,7 +81,7 @@ def start_env():
     
     from sam2.build_sam import build_sam2
     from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-    sam2_checkpoint = "checkpoints/sam2.1_hiera_large.pt"
+    sam2_checkpoint = "../checkpoints/sam2.1_hiera_large.pt"
     model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
     
     try:
