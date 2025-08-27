@@ -71,17 +71,15 @@ Download and link to the SAM2 checkpoints
 ```
 cd checkpoints
 ./download_ckpts.sh
-cd ~/mysamp
-ln -s sam2/checkpoints/ .
 ```
 
-Clone this repository ( you should stay in ~/mysamp )
+Clone this repository into your `mysamp` directory
 ```bash
+cd ~/mysamp
 git clone https://github.com/Ronja-Mueller/Samplify
 ```
 
 Install additional python packages 
-
 ```bash
 pip install numpy pandas joblib torch torchvision tqdm matplotlib opencv-python scikit-image scikit-learn openpyxl
 ```
@@ -90,15 +88,10 @@ Start a SCREEN session (optional but recommended)
 ```bash
 screen -S samplify_session
 ```
-Change permissions for the application 
-```
-cd ~/mysamp/Samplify
-chmod 755 samplify.py
-```
 
-Run the example
-
+Run the example (inside the `Samplify` directory in your new `mysamp` directory)
 ```bash
+cd ~/mysamp/Samplify
 ./samplify.py images_folder
 ```
 
@@ -115,7 +108,7 @@ Processed files are stored in the `out` subdirectory of the images_folder
 ## Samplify Command-Line Prompts 
 
 ```bash
-samplify.py <directory> [rf_model_path] [--segmentation-only] [--regenerate-summary]
+./samplify.py <directory> [rf_model_path] [--segmentation-only] [--regenerate-summary]
 ```
 
 ### **Arguments**
@@ -197,7 +190,7 @@ Run Samplify in segmentation-only mode to extract seed features for your train (
 Run the training script.
 
 ```bash
-rf_pipeline.py <train_file> [--label_dir LABEL_DIR] [--test_dir TEST_DIR] [--output_dir OUTPUT_DIR] 
+./rf_pipeline.py <train_file> [--label_dir LABEL_DIR] [--test_dir TEST_DIR] [--output_dir OUTPUT_DIR] 
 ```
 
 #### **Arguments**
