@@ -92,7 +92,7 @@ screen -S samplify_session
 ```
 Change permissions for the application 
 ```
-cd ~/mysamp
+cd ~/mysamp/Samplify
 chmod 755 samplify.py
 ```
 
