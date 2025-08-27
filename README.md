@@ -83,7 +83,7 @@ git clone https://github.com/Ronja-Mueller/Samplify
 Install additional python packages 
 
 ```bash
-pip install numpy pandas joblib torch tqdm matplotlib opencv-python scikit-image scikit-learn openpyxl
+pip install numpy pandas joblib torch torchvision tqdm matplotlib opencv-python scikit-image scikit-learn openpyxl
 ```
 
 Start a SCREEN session (optional but recommended)
@@ -99,7 +99,7 @@ chmod 755 samplify.py
 Run the example
 
 ```bash
-./samplify.py image_folder
+./samplify.py images_folder
 ```
 
 - Wait for the estimated execution time, displayed in red (can take up to **5 minutes**).
@@ -108,7 +108,7 @@ Run the example
 
 **Retrieve Output**
 
-Processed files are stored in the `out` subdirectory of the image_folder
+Processed files are stored in the `out` subdirectory of the images_folder
 
 ---
 
