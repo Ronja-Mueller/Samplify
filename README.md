@@ -74,7 +74,7 @@ cd checkpoints
 
 Clone this repository into your `mysamp` directory
 ```bash
-cd mysamp
+cd ~/mysamp
 git clone https://github.com/Ronja-Mueller/Samplify
 ```
 
@@ -90,7 +90,7 @@ screen -S samplify_session
 
 Run the example (inside the `Samplify` directory in your new `mysamp` directory)
 ```bash
-cd mysamp/Samplify
+cd ~/mysamp/Samplify
 ./samplify.py images_folder
 ```
 
