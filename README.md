@@ -31,11 +31,14 @@ For a detailed overview check: https://developer.nvidia.com/cuda-gpus.
 We were able to run our setup on a NVida V100 (7.0)  and a RTX 4070 (8.9),
 it failed on a RTX 1080 (6.1) though...
 
-- Python >= 3.10
+- Linux OS
+- Python >= 3.10 (venv enabled)
 - a working SAM2 installation (see section [Installation](#installation))
 
-**Note:** We used Ubuntu 22.04 LTS for our installation but any modern Linux distro providing
-Python3 should be fine.
+**Note:** If you are running Windows, it is highly recommended to enable the
+Windows Subsystem for Linux (WSL). We could run Samplify on 
+Ubuntu 22.04 and Ubuntu 24.04 within WSL (Windows 11 as host) and a
+NVidia A4000 GPU. (An installation with Python3 for Windows has not been tested)
 
 ## Installation
 
@@ -270,5 +273,5 @@ By following these standards, image quality is optimized, improving segmentation
 
 ## Credits
 
-Developed in collaboration with **Prof. Dirk Walther** (AG Bioinformatcs, MPI) and **Dr. Heinrich Bente** (AG Köhler, MPI).
+Developed in collaboration with **Prof. Dirk Walther** (AG Bioinformatcs, MPI),  **Dr. Heinrich Bente** (AG Köhler, MPI) and **Andreas Donath** (MPI).
 
