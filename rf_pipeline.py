@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+# coding: utf-8
+# Application samplify.py (Segmentation and Classification tool for images of Arabidopsis Seeds)
+# Author: Ronja Lea Jennifer Müller, Potsdam 2025
+
 import os
 import sys
 import argparse
