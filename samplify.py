@@ -915,7 +915,7 @@ def regenerate_summary_from_parameters(csv_path, selected_features):
 
     #add categorical summary
     try:
-        build_categorical_summary(feature_csv_path=csv_path,excel_summary_path=summary_path)
+        build_categorical_summary(feature_csv_path=csv_path,excel_summary_path=summary_path, feature_columns=selected_features)
     except Exception as e:
         print(f"Error saving categorical summary: {e}")
 
@@ -1220,10 +1220,6 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
             summary_path = os.path.join(output_folder, f"seed_summary_{input_folder_name}.xlsx")
             summary_df.to_excel(summary_path, sheet_name="Summary", index=False)
             print(f"Summary saved to {summary_path}.")
-
-            # Save summary with metadata
-            summary_path = os.path.join(output_folder, f"seed_summary_{input_folder_name}.xlsx")
-            summary_df.to_excel(summary_path, index=False)
             
             # Add metadata
             metadata = {
@@ -1249,7 +1245,7 @@ def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segment
 
     #save categorical summary
     try:
-        build_categorical_summary(feature_csv_path=all_parameters_path,excel_summary_path=summary_path)
+        build_categorical_summary(feature_csv_path=all_parameters_path,excel_summary_path=summary_path, feature_columns=selected_features)
     except Exception as e:
         print(f"Error saving categorical summary: {e}")
         
@@ -1278,7 +1274,7 @@ def main():
     if args.regenerate_summary:
         param_csv = glob(os.path.join(args.directory, "out/seed_parameters_*.csv"))
         if not param_csv:
-            raise FileNotFoundError("No seed_parameters CSV found in the 'out' directory.")
+            raise FileNotFoundError("No seed_parameters CSV found for path ({param_csv}) in the 'out' directory.")
         param_csv_path = param_csv[0]
         selected_features = prompt_feature_selection()
         regenerate_summary_from_parameters(param_csv_path, selected_features)
