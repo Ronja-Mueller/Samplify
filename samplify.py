@@ -1273,12 +1273,22 @@ def main():
     param_csv_path = None
 
     if args.regenerate_summary:
-        param_csv = glob(os.path.join(args.directory, "out/seed_parameters_*.csv"))
-        if not param_csv:
-            raise FileNotFoundError(f"No seed_parameters CSV found for path ({param_csv}) in the 'out' directory.")
+        search_path = os.path.join(args.directory, "out/seed_parameters_*.csv")
+        param_csv = glob(search_path)
+    
+        while not param_csv:
+            print(f"No seed_parameters CSV found in: {search_path}")
+            new_dir = input("Enter a new directory to search (or press Enter to quit): ").strip()
+            if not new_dir:
+                raise FileNotFoundError(f"No seed_parameters CSV found. Last attempted path: {search_path}")
+            search_path = os.path.join(new_dir, "out/seed_parameters_*.csv")
+            param_csv = glob(search_path)
+    
         param_csv_path = param_csv[0]
+        print(f"Found seed_parameters CSV: {param_csv_path}")
         selected_features = prompt_feature_selection()
         regenerate_summary_from_parameters(param_csv_path, selected_features)
+    
         sys.exit(0)
         
     if not os.path.isdir(args.directory):
