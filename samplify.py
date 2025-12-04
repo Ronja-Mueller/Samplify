@@ -664,15 +664,9 @@ def plot_contours_with_probabilities(features_list, image, rf_path, debug=False,
         contour = feature["Contour"]
         predicted_label = feature["Predicted Label"]
         predicted_probability = feature["Predicted Probability"]
+        #centroid
+        (cx, cy) = feature["Centroid"]
         
-        # Compute the centroid of the contour
-        M = cv2.moments(contour)
-        if M["m00"] != 0:
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
-        else:
-            cx, cy = 0, 0  # If division by zero, place it at (0,0)
-            # Draw the contour with a solid or dashed line
         if predicted_probability > 0.7:
             cv2.drawContours(image_copy, [contour], -1, label_colors.get(predicted_label, (255, 255, 255)), thick)
             cv2.drawMarker(image_copy, (cx, cy), (0, 0, 0), markerType=cv2.MARKER_CROSS, markerSize=25, thickness=thick)
@@ -724,8 +718,8 @@ def predict_labels_with_random_forest(features_list, model):
 
     # Mapping from old class names to new class names
     class_name_map = {
-        "Aborted": "Collapsed",
-        "Partially Aborted": "Partially Collapsed"
+        "Aborted": "Fully Collapsed",
+        "Partially": "Partially Collapsed"
         # "Normal" stays the same
     }
         
