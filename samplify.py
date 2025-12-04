@@ -1275,7 +1275,7 @@ def main():
     if args.regenerate_summary:
         param_csv = glob(os.path.join(args.directory, "out/seed_parameters_*.csv"))
         if not param_csv:
-            raise FileNotFoundError("No seed_parameters CSV found for path ({param_csv}) in the 'out' directory.")
+            raise FileNotFoundError(f"No seed_parameters CSV found for path ({param_csv}) in the 'out' directory.")
         param_csv_path = param_csv[0]
         selected_features = prompt_feature_selection()
         regenerate_summary_from_parameters(param_csv_path, selected_features)
