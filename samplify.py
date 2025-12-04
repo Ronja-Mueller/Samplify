@@ -721,6 +721,13 @@ def predict_labels_with_random_forest(features_list, model):
     :param model: Trained Random Forest model.
     :return: Updated features_list with predicted labels and probabilities.
     """
+
+    # Mapping from old class names to new class names
+    class_name_map = {
+        "Aborted": "Collapsed",
+        "Partially Aborted": "Partially Collapsed"
+        # "Normal" stays the same
+        
     learned_features = model.feature_names_in_
     
     for feature in features_list:
@@ -728,7 +735,13 @@ def predict_labels_with_random_forest(features_list, model):
         
         # Predict the label using the trained Random Forest model
         predicted_label = model.predict([feature_vector])[0]
-        feature["Predicted Label"] = predicted_label
+
+        # Mapping
+        # Only map if the predicted label is one of the old names
+        mapped_label = class_name_map.get(predicted_label, predicted_label)
+
+        # Store updated label
+        feature["Predicted Label"] = mapped_label
         
         # Predict the probabilities for all classes
         predicted_proba = model.predict_proba([feature_vector])[0]
