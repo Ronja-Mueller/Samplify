@@ -897,7 +897,7 @@ def regenerate_summary_from_parameters(csv_path, selected_features):
 
     summary_df = pd.DataFrame(summary)
     summary_path = csv_path.replace("parameters", "summary_regenerated").replace(".csv", ".xlsx")
-    summary_df.to_excel(summary_path, index=False)
+    summary_df.to_excel(summary_path, sheet_name="Summary", index=False)
 
     # Add metadata
     try:
@@ -1273,7 +1273,7 @@ def main():
     param_csv_path = None
 
     if args.regenerate_summary:
-        search_path = os.path.join(args.directory, "out/seed_parameters_*.csv")
+        search_path = os.path.join(args.directory, "seed_parameters_*.csv")
         param_csv = glob(search_path)
     
         while not param_csv:
@@ -1281,7 +1281,7 @@ def main():
             new_dir = input("Enter a new directory to search (or press Enter to quit): ").strip()
             if not new_dir:
                 raise FileNotFoundError(f"No seed_parameters CSV found. Last attempted path: {search_path}")
-            search_path = os.path.join(new_dir, "out/seed_parameters_*.csv")
+            search_path = os.path.join(new_dir, "seed_parameters_*.csv")
             param_csv = glob(search_path)
     
         param_csv_path = param_csv[0]
