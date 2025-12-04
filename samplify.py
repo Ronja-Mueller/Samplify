@@ -727,6 +727,7 @@ def predict_labels_with_random_forest(features_list, model):
         "Aborted": "Collapsed",
         "Partially Aborted": "Partially Collapsed"
         # "Normal" stays the same
+    }
         
     learned_features = model.feature_names_in_
     
