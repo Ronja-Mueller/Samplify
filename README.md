@@ -12,6 +12,7 @@ Samplify provides two modes:
   - **Excel file**: Summary statistics with seed type counts for each image.
 - **Segmentation-only**: Detects and segments seeds without classification, saving only:
   - **CSV file**: Contains seed contour parameters for each image.
+  - **Excel file**: Summary statistics with number of seeds for each image.
 
 ## Features
 
@@ -19,7 +20,7 @@ Samplify provides two modes:
 - **Random Forest Classification**: A trained model predicts seed types.
 - **Comprehensive Output**:
   - Predicted seed labels and probabilities.
-  - Summary reports (classification accuracy, confidence, execution time).
+  - Summary reports (classification accuracy, feature summaries, prediction confidence, execution time).
   - Contour visualization of detected seed regions.
 
 ---
@@ -38,7 +39,7 @@ it failed on a RTX 1080 (6.1) though...
 **Note:** If you are running Windows, it is highly recommended to enable the
 Windows Subsystem for Linux (WSL). We could run Samplify on 
 Ubuntu 22.04 and Ubuntu 24.04 within WSL (Windows 11 as host) and a
-NVidia A4000 GPU. (An installation with Python3 for Windows has not been tested)
+NVidia A4000 and a RTX 4070 SUPER. (An installation with Python3 for Windows has not been tested)
 
 ## Installation
 
@@ -98,7 +99,7 @@ cd ~/mysamp/Samplify
 ```
 
 - Wait for the estimated execution time, displayed in red (can take up to **5 minutes**).
-- To detach the session and keep it running in the background, press: `Ctrl + a + d`
+- To detach the screen session and keep it running in the background, press: `Ctrl + a + d`
 - Check progress by retaching to the session: `screen -r samplify_session`
 
 **Retrieve Output**
@@ -108,6 +109,8 @@ Processed files are stored in the `out` subdirectory of the images_folder
 ---
 
 ## Samplify Command-Line Prompts 
+Note: Your prompt should indicate that you are in the correct environment like so:
+`(samplyenv) user@hostname:~/mysamp$`
 
 ```bash
 ./samplify.py <directory> [rf_model_path] [--segmentation-only] [--regenerate-summary]
@@ -127,6 +130,8 @@ Processed files are stored in the `out` subdirectory of the images_folder
 This avoids reprocessing images.
 
 ### **Examples**
+Note: Your prompt should indicate that you are in the correct environment like so:
+`(samplyenv) user@hostname:~/mysamp$`
 
 #### Full Segmentation & Classification with your own RF
 
@@ -137,7 +142,7 @@ samplify.py /path/to/images /path/to/your/rf_model.pkl
 #### Segmentation-Only:
 
 ```bash
-samplify.py /remote/path/to/images --segmentation-only
+samplify.py /path/to/images --segmentation-only
 ```
 
 #### Regenerate Summary from previous runs:
