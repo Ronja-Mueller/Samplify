@@ -663,10 +663,10 @@ def plot_contours_with_probabilities(features_list, image, rf_path, debug=False,
     for feature in features_list:
         contour = feature["Contour"]
         predicted_label = feature["Predicted Label"]
+
         predicted_probability = feature["Predicted Probability"]
         #centroid
         (cx, cy) = feature["Centroid"]
-        
         if predicted_probability > 0.7:
             cv2.drawContours(image_copy, [contour], -1, label_colors.get(predicted_label, (255, 255, 255)), thick)
             cv2.drawMarker(image_copy, (cx, cy), (0, 0, 0), markerType=cv2.MARKER_CROSS, markerSize=25, thickness=thick)
@@ -682,7 +682,7 @@ def plot_contours_with_probabilities(features_list, image, rf_path, debug=False,
             legend_patches.append(patch)
         
         # Add cross marker to legend
-        cross_marker = plt.Line2D([0], [0], marker='+', color='black', linestyle="None", markersize=5, label="High Probability (>70%)")
+        cross_marker = plt.Line2D([0], [0], marker='+', color='black', linestyle="None", markersize=5, label="Prediction Probability >70%")
         legend_patches.append(cross_marker)
 
         #Add RF info
@@ -864,21 +864,34 @@ def regenerate_summary_from_parameters(csv_path, selected_features):
 
     df = pd.read_csv(csv_path)
     summary = []
+    
+    # Infer feature columns if not provided
+    if selected_features is None:
+        selected_features = [
+            c for c in df.columns
+            if c not in ["Image Name", "Predicted Label", "Contour", "Centroid", "Bounding Box", "Label"]
+        ]
 
     for image_name, group in df.groupby("Image Name"):
-        row = {
-            "Image Name": image_name,
-            "Total": len(group),
-            "Normal": (group["Predicted Label"] == "Normal").sum(),
-            "Partially Collapsed": (group["Predicted Label"] == "Partially Collapsed").sum(),
-            "Fully Collapsed": (group["Predicted Label"] == "Fully Collapsed").sum(),
-        }
-        total = row["Total"]
-        row["%Normal"] = round(row["Normal"] / total * 100, 2)
-        row["%Partially Collapsed"] = round(row["Partially Collapsed"] / total * 100, 2)
-        row["%Fully Collapsed"] = round(row["Fully Collapsed"] / total * 100, 2)
-        row["%High Confidence Prediction (>0.7)"] = len(group[group['Predicted Probability']>0.7]) / total * 100
-        row["Avg. Prediction Confidence (%)"] = group['Predicted Probability'].mean() * 100
+    
+        if "Predicted Label" in df.columns:
+            row = {
+                "Image Name": image_name,
+                "Total": len(group),
+                "Normal": (group["Predicted Label"] == "Normal").sum(),
+                "Partially Collapsed": (group["Predicted Label"] == "Partially Collapsed").sum(),
+                "Fully Collapsed": (group["Predicted Label"] == "Fully Collapsed").sum(),
+            }
+            total = row["Total"]
+            row["%Normal"] = round(row["Normal"] / total * 100, 2)
+            row["%Partially Collapsed"] = round(row["Partially Collapsed"] / total * 100, 2)
+            row["%Fully Collapsed"] = round(row["Fully Collapsed"] / total * 100, 2)
+            row["%High Confidence Prediction (>0.7)"] = len(group[group['Predicted Probability']>0.7]) / total * 100
+            row["Avg. Prediction Confidence (%)"] = group['Predicted Probability'].mean() * 100
+        else:
+            row = {
+                "Image Name": image_name,
+                "Total": len(group)}
 
         if selected_features:
             for feat in selected_features:
@@ -909,10 +922,15 @@ def regenerate_summary_from_parameters(csv_path, selected_features):
         print(f"Metadata write failed: {e}")
 
     #add categorical summary
-    try:
-        build_categorical_summary(feature_csv_path=csv_path,excel_summary_path=summary_path, feature_columns=selected_features)
-    except Exception as e:
-        print(f"Error saving categorical summary: {e}")
+    if "Predicted Label" in df.columns:
+        try:
+            build_categorical_summary(feature_csv_path=csv_path,excel_summary_path=summary_path, feature_columns=selected_features)
+        except Exception as e:
+            print(f"Error saving categorical summary: {e}")
+        try:
+            create_high_confidence_summary(df, summary_path)
+        except Exception as e:
+            print(f"Error saving high confidence summary: {e}")
 
     print(f"\nRegenerated summary saved to: {summary_path}")
 
@@ -961,11 +979,11 @@ def prompt_feature_selection():
 
     selection = input(
         "\nEnter numbers of features to include (comma-separated), "
-        "or press Enter to skip and select None: "
+        "or press Enter to skip and select all: "
     ).strip()
 
     if not selection:
-        selected = None
+        return None
     else:
         try:
             selected_indexes = [int(i.strip()) - 1 for i in selection.split(',')]
@@ -988,8 +1006,8 @@ def prompt_feature_selection():
 def build_categorical_summary(
         feature_csv_path: str,
         excel_summary_path: str,
-        sheet_name="Categorical Summary",
-        feature_columns=None
+        feature_columns=None,
+        sheet_name="Categorical Summary"
     ):
     """
     Builds a categorical summary using a single total-feature CSV that contains
@@ -1058,194 +1076,341 @@ def build_categorical_summary(
     except Exception as e:
         print(f"ERROR while writing categorical summary: {e}")
 
+def create_high_confidence_summary(all_parameters_df, summary_path, selected_features=None):
+    """
+    Asks user if they want an additional threshold-based summary.
+    If yes, filter all_parameters_df by Predicted Probability and create
+    a new Excel sheet containing a refined summary similar to the main summary.
+    """
+
+    user_choice = input(
+        "\nWould you like to generate an additional summary of seeds with "
+        "Prediction Probability >= threshold? (y/n): "
+    ).strip().lower()
+
+    if user_choice != "y":
+        print("Skipping high-confidence summary.")
+        return
+
+    # Ask for threshold
+    while True:
+        try:
+            threshold = float(input("Enter threshold (e.g., 0.8): ").strip())
+            break
+        except ValueError:
+            print("Invalid value. Enter a numeric threshold, e.g., 0.85")
+
+    # Filter by threshold
+    filtered = all_parameters_df[
+        all_parameters_df["Predicted Probability"] >= threshold
+    ].copy()
+
+    total_seeds = all_parameters_df.shape[0]
+    filtered_seeds = filtered.shape[0]
+    excluded = total_seeds - filtered_seeds
+    excl_percent = (excluded / total_seeds * 100) if total_seeds > 0 else 0
+
+    if filtered.empty:
+        print(f"No rows with Predicted Probability >= {threshold}")
+        return
+
+    # Build a refined summary similar to your main summary
+    summary_rows = []
     
-def classify_seeds_in_folder(input_folder, output_folder, rf_model_path, segmentation_only=False, selected_features=None):
+    # Infer feature columns if not provided
+    if selected_features is None:
+        selected_features = [
+            c for c in all_parameters_df.columns
+            if c not in ["Image Name", "Predicted Label", "Contour", "Centroid", "Bounding Box", "Label"]
+        ]
+
+    for image_name, group in filtered.groupby("Image Name"):
+
+        label_counts = group["Predicted Label"].value_counts()
+        total = len(group)
+
+        normal = label_counts.get("Normal", 0)
+        part = label_counts.get("Partially Collapsed", 0)
+        full = label_counts.get("Fully Collapsed", 0)
+
+        pct_normal = normal / total * 100
+        pct_part = part / total * 100
+        pct_full = full / total * 100
+
+        pct_high = len(group[group["Predicted Probability"] > 0.7]) / total * 100
+        avg_conf = group["Predicted Probability"].mean() * 100
+
+        row = {
+            "Image Name": image_name,
+            "Total": total,
+            "Normal": normal,
+            "Partially Collapsed": part,
+            "Fully Collapsed": full,
+            "%Normal": round(pct_normal, 2),
+            "%Partially Collapsed": round(pct_part, 2),
+            "%Fully Collapsed": round(pct_full, 2),
+            "%High Confidence Prediction(>0.7)": round(pct_high, 2),
+            "Avg. Prediction Confidence (%)": round(avg_conf, 2)
+        }
+
+        # Add selected feature means
+        if selected_features:
+            for feat in selected_features:
+                if feat in group.columns:
+                    row[f"Mean {feat}"] = round(group[feat].mean(), 2)
+
+        summary_rows.append(row)
+
+    summary_df = pd.DataFrame(summary_rows).sort_values(by="Image Name")
+
+    # Write summary to Excel
+    try:
+        wb = load_workbook(summary_path)
+        sheet_name = f"High_Conf_{threshold}"
+
+        if sheet_name in wb.sheetnames:
+            del wb[sheet_name]
+
+        ws = wb.create_sheet(sheet_name)
+
+        ws.append(["Threshold Used", threshold])
+        ws.append(["Total Seeds", total_seeds])
+        ws.append(["Seeds Excluded", excluded])
+        ws.append(["Excluded (%)", round(excl_percent, 2)])
+        ws.append([])
+
+        ws.append(list(summary_df.columns))
+        for row in summary_df.itertuples(index=False, name=None):
+            ws.append(row)
+
+        wb.save(summary_path)
+        print(f"High-confidence summary saved to sheet '{sheet_name}' in {summary_path}")
+
+    except Exception as e:
+        print(f"Failed to write high-confidence summary: {e}")
+
+
+
+    
+def classify_seeds_in_folder(
+        input_folder, 
+        output_folder, 
+        rf_model_path, 
+        segmentation_only=False, 
+        selected_features=None):
+
     start = time.time()
     input_folder_name = os.path.basename(input_folder)
     print(f"Input folder: {input_folder_name}")
 
     os.makedirs(output_folder, exist_ok=True)
-    output_images_folder = os.path.join(output_folder, 'predicted_images')
+    output_images_folder = os.path.join(output_folder, "predicted_images")
+
     if not segmentation_only:
         os.makedirs(output_images_folder, exist_ok=True)
-
-    all_parameters = []
-    summary = []
-    
-    if not segmentation_only:
         model = joblib.load(rf_model_path)
 
-    image_paths = glob(os.path.join(input_folder, "*.*"))
+    image_paths = sorted(glob(os.path.join(input_folder, "*.*")))
     num_images = len(image_paths)
-    
     if num_images == 0:
-        print("No images found in the folder.")
+        print("No images found.")
         return
 
     print(f"Processing {num_images} images...\n")
-    
-    # Track estimated time per image
-    estimated_time_per_image = None 
-    progress_bar = tqdm(image_paths, desc="Processing images", bar_format='{l_bar}{bar:40}{r_bar}', unit="image")
+
+    all_parameters = []
+    summary_rows = []
+    estimated_time_per_image = None
+
+    progress_bar = tqdm(
+        image_paths,
+        desc="Processing images",
+        bar_format="{l_bar}{bar:40}{r_bar}",
+        unit="image"
+    )
 
     for i, image_path in enumerate(progress_bar):
-        image_name = os.path.basename(image_path).split('.')
-        image_name = f"{image_name[0]}.{image_name[1]}" if len(image_name) > 2 else image_name[0]
 
-        start_image = time.time()
-        
+        image_name = os.path.splitext(os.path.basename(image_path))[0]
+        img_start = time.time()
+
         try:
-            image = cv2.imread(image_path)
-            if image is None:
-                print(f"Failed to load image: {image_path}")
+            img = cv2.imread(image_path)
+            if img is None:
+                print(f"Failed to load: {image_path}")
                 continue
 
-            h,w = image.shape[:2]
-            max_side = max(h,w)
-            if max_side>9000: #reduce images with high size
-                scaling = 9000/max_side
-                new_h = int(scaling*h)
-                new_w = int(scaling*w)
-                image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                #print(f"Image resized to {new_w,new_h}")
-                
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            image, mean_background_color = adjust_brightness_to_white(image)
-            
-            seed_features = hybrid_segmentation(image, mean_background_color)  
+            # Resize if extremely large
+            h, w = img.shape[:2]
+            if max(h, w) > 9000:
+                scale = 9000 / max(h, w)
+                img = cv2.resize(img, (int(w * scale), int(h * scale)), cv2.INTER_AREA)
+
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img, bg_color = adjust_brightness_to_white(img)
+
+            # Segmentation
+            seed_features = hybrid_segmentation(img, bg_color)
+
             if not seed_features:
-                print(f"No seeds detected in {image_name}.")
-                summary.append({
+                # Even in empty case ensure Image Name is present
+                summary_rows.append({
                     "Image Name": image_name,
-                    "Total": "-",
-                    "Normal": "-",
-                    "Partially Collapsed": "-",
-                    "Fully Collapsed": "-",
-                    "%Normal": "-",
-                    "%Partially Collapsed": "-",
-                    "%Fully Collapsed": "-",
-                    "%High Confidence Prediction(>0.7)": "-",
-                    "Avg. Prediction Confidence (%)": "-",
-                    "Execution Time (s)": "-"
+                    "Total": 0
                 })
                 continue
 
+            # If classification is disabled
             if segmentation_only:
+                # Convert to DF
                 features_df = pd.DataFrame(seed_features)
                 features_df.insert(0, "Image Name", image_name)
                 all_parameters.append(features_df)
                 
-            else:
-                seed_features = predict_labels_with_random_forest(seed_features, model)
-                features_df = pd.DataFrame(seed_features)
-    
-                # Save individual image parameters
-                features_df.insert(0, "Image Name", image_name)
-                all_parameters.append(features_df)
-    
-                # Summarize seed counts
-                label_counts = features_df["Predicted Label"].value_counts()
-                total = len(features_df)
-                normal = label_counts.get("Normal", 0) / total * 100
-                partially_collapsed = label_counts.get("Partially Collapsed", 0) / total * 100
-                fully_collapsed = label_counts.get("Fully Collapsed", 0) / total * 100
-                confidence = len(features_df[features_df['Predicted Probability']>0.7]) / total * 100
-                avg_conf = features_df['Predicted Probability'].mean() * 100
-                execution = time.time() - start_image 
                 row = {
                     "Image Name": image_name,
-                    "Total": len(features_df),
-                    "Normal": label_counts.get("Normal", 0),
-                    "Partially Collapsed": label_counts.get("Partially Collapsed", 0),
-                    "Fully Collapsed": label_counts.get("Fully Collapsed", 0),
-                    "%Normal": round(normal, 2),
-                    "%Partially Collapsed": round(partially_collapsed, 2),
-                    "%Fully Collapsed": round(fully_collapsed, 2),
-                    "%High Confidence Prediction(>0.7)": round(confidence,2),
-                    "Avg. Prediction Confidence (%)": round(avg_conf,2),
-                    "Execution Time (s)": round(execution,2)
+                    "Total": len(features_df)
                 }
-                # Add selected numerical features
+        
+                # Optional extra features
                 if selected_features:
                     for feat in selected_features:
                         if feat in features_df.columns:
                             row[f"Mean {feat}"] = round(features_df[feat].mean(), 2)
                         else:
-                            print(f"Warning: Feature '{feat}' not found in DataFrame.")
-
-                summary.append(row)
-                
-                # Save the image with segmentation and prediction contours
-                output_image = plot_contours_with_probabilities(
-                    seed_features, image, rf_path=rf_model_path,
-                    save_path=f"{output_images_folder}/{image_name}_predicted.jpg"
-                )
-    
-                # Update estimated time per image
-                if estimated_time_per_image is None:
-                    estimated_time_per_image = execution
+                            print(f"Warning: Feature '{feat}' missing.")
                 else:
-                    estimated_time_per_image = (estimated_time_per_image * i + execution) / (i + 1)
-    
-                # Estimate remaining time
-                remaining_time = estimated_time_per_image * (num_images - (i + 1))
-                progress_bar.set_postfix(remaining=f"\033[1;31m {remaining_time:.2f}s\033[0m")
-        
-        except Exception as e:
-            print(f"Error processing image {image_name}: {e}")
-            print("Error details:", traceback.format_exc())
-            continue  
-            
-    try:
-        all_parameters_df = pd.concat(all_parameters, ignore_index=True)
-        all_parameters_df.sort_values(by="Image Name", ascending=True, inplace=True)
-        all_parameters_path = os.path.join(output_folder, f"seed_parameters_{input_folder_name}.csv")
-        all_parameters_df.to_csv(all_parameters_path, index=False)
-        print(f"\nParameters saved to {all_parameters_path}.")
-    except Exception as e:
-        print(f"Error saving parameters to CSV: {e}")
-        print("Error details:", traceback.format_exc())
-        
-    if not segmentation_only:
-        try:
-            summary_df = pd.DataFrame(summary)
-            summary_df.sort_values(by="Image Name", ascending=True, inplace=True)
-            total_execution_time = time.time() - start
-            summary_df["Total Time"] = round(total_execution_time, 2)
-            summary_path = os.path.join(output_folder, f"seed_summary_{input_folder_name}.xlsx")
-            summary_df.to_excel(summary_path, sheet_name="Summary", index=False)
-            print(f"Summary saved to {summary_path}.")
-            
-            # Add metadata
-            metadata = {
-                "Random Forest Model": rf_model_path,
-                "Run Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "Segmentation Only": segmentation_only,
-                "Selected Features": ", ".join(selected_features) if selected_features else None,
-                "Total Images Processed": num_images
-            }
-            
-            try:
-                wb = load_workbook(summary_path)
-                ws = wb.create_sheet(title="Metadata", index=0)
-                for key, value in metadata.items():
-                    ws.append([key, str(value)])
-                wb.save(summary_path)
-                print(f"Summary with metadata saved to {summary_path}.")
-            except Exception as e:
-                print(f"Failed to write metadata: {e}")
-        except Exception as e:
-            print(f"Error saving summary to Excel: {e}")
-            print("Error details:", traceback.format_exc())
+                    print("find")
+                    selected_features = [
+                        c for c in features_df.columns
+                        if c not in ["Image Name", "Predicted Label", "Contour", "Centroid", "Bounding Box", "Label"]
+                    ]
+                            
+                summary_rows.append(row)
 
-    #save categorical summary
+            else:
+                # Run classifier
+                seed_features = predict_labels_with_random_forest(seed_features, model)
+                features_df = pd.DataFrame(seed_features)
+                features_df.insert(0, "Image Name", image_name)
+                all_parameters.append(features_df)
+
+                # Label statistics
+                total = len(features_df)
+                label_counts = features_df["Predicted Label"].value_counts()
+
+                pct = lambda lbl: round(label_counts.get(lbl, 0) / total * 100, 2)
+                high_conf = round(len(features_df[features_df["Predicted Probability"] > 0.7]) / total * 100, 2)
+                avg_conf = round(features_df["Predicted Probability"].mean() * 100, 2)
+
+                row = {
+                    "Image Name": image_name,
+                    "Total": total,
+                    "Normal": label_counts.get("Normal", 0),
+                    "Partially Collapsed": label_counts.get("Partially Collapsed", 0),
+                    "Fully Collapsed": label_counts.get("Fully Collapsed", 0),
+                    "%Normal": pct("Normal"),
+                    "%Partially Collapsed": pct("Partially Collapsed"),
+                    "%Fully Collapsed": pct("Fully Collapsed"),
+                    "%High Confidence Prediction(>0.7)": high_conf,
+                    "Avg. Prediction Confidence (%)": avg_conf
+                }
+
+                # Optional extra features
+                if not selected_features:
+                    selected_features = [
+                        c for c in features_df.columns
+                        if c not in ["Image Name", "Predicted Label", "Contour", "Centroid", "Bounding Box", "Label"]
+                    ]
+                    
+                for feat in selected_features:
+                    if feat in features_df.columns:
+                        row[f"Mean {feat}"] = round(features_df[feat].mean(), 2)
+                    else:
+                        print(f"Warning: Feature '{feat}' missing.")
+                    
+                
+
+                summary_rows.append(row)
+
+                # Save annotated image
+                plot_contours_with_probabilities(
+                    seed_features,
+                    img,
+                    rf_path=rf_model_path,
+                    save_path=os.path.join(output_images_folder, f"{image_name}_predicted.jpg")
+                )
+
+            # Always calculate execution time
+            execution = time.time() - img_start
+
+            # Progress estimation
+            if estimated_time_per_image is None:
+                estimated_time_per_image = execution
+            else:
+                estimated_time_per_image = (estimated_time_per_image * i + execution) / (i + 1)
+
+            remaining = estimated_time_per_image * (num_images - i - 1)
+            progress_bar.set_postfix(remaining=f"{remaining:.2f}s")
+
+        except Exception as e:
+            print(f"Error processing {image_name}: {e}")
+            traceback.print_exc()
+            continue
+
     try:
-        build_categorical_summary(feature_csv_path=all_parameters_path,excel_summary_path=summary_path, feature_columns=selected_features)
+        params_df = pd.concat(all_parameters, ignore_index=True)
+        params_df.sort_values("Image Name", inplace=True)
+        params_path = os.path.join(output_folder, f"seed_parameters_{input_folder_name}.csv")
+        params_df.to_csv(params_path, index=False)
+        print(f"Parameters saved to {params_path}")
     except Exception as e:
-        print(f"Error saving categorical summary: {e}")
-        
-    total_execution_time = time.time() - start
-    print(f"\nTotal execution time for {input_folder}: {total_execution_time:.2f}s")
+        print("Error saving parameters:", e)
+        traceback.print_exc()
+
+    try:
+        summary_df = pd.DataFrame(summary_rows)
+        summary_df.sort_values("Image Name", inplace=True)
+
+        total_time = round(time.time() - start, 2)
+        summary_df["Total Time"] = total_time
+
+        summary_path = os.path.join(output_folder, f"seed_summary_{input_folder_name}.xlsx")
+        summary_df.to_excel(summary_path, index=False, sheet_name="Summary")
+
+        # Metadata
+        metadata = {
+            "Random Forest Model": rf_model_path if not segmentation_only else None,
+            "Run Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Segmentation Only": segmentation_only,
+            "Selected Features": ", ".join(selected_features) if selected_features else "",
+            "Total Images": num_images
+        }
+
+        wb = load_workbook(summary_path)
+        ws = wb.create_sheet("Metadata", 0)
+        for k, v in metadata.items():
+            ws.append([k, str(v)])
+        wb.save(summary_path)
+
+        print(f"Summary saved to {summary_path}")
+
+    except Exception as e:
+        print("Error saving summary:", e)
+        traceback.print_exc()
+        summary_path = None
+
+    if summary_path and not segmentation_only:
+        try:
+            build_categorical_summary(params_path, summary_path, selected_features)
+            create_high_confidence_summary(params_df, summary_path, selected_features)
+        except Exception as e:
+            print("Error creating additional summaries:", e)
+
+    print(f"\nTotal execution time: {total_time:.2f}s")
+
+
+    
 
 def main():
     if not os.getenv("STY"):  # "STY" is only set inside a screen session
