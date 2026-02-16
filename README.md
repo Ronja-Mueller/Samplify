@@ -252,10 +252,11 @@ To ensure high-quality segmentation and classification, follow this imaging prot
 
 **Microscope Settings**
 
-- Use **50x magnification (blue lens)**.
+- Use **50x magnification (ZS-20 lens)**.
 - Set scale to **1 mm**, with black text and lines.
 - Place scale in the **bottom right** of the image.
-
+- Scan an area of **3cm x 4cm**.
+  
 **Seed Spread & Background**
 
 - Use **plain white printer paper** as background.

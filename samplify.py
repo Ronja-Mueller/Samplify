@@ -26,6 +26,7 @@ import cv2
 import torch
 import os
 import sys
+import re
 import time
 import traceback
 import joblib
@@ -46,6 +47,7 @@ import warnings
 from openpyxl import load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from datetime import datetime
+from pathlib import Path
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn.utils.validation")
 
 
@@ -633,7 +635,7 @@ def read_coordinates_from_txt(file_path, x_col='X', y_col='Y', label_col='Counte
         print(f"Error reading file {file_path}: {e}")
         return 0
 
-def plot_contours_with_probabilities(features_list, image, rf_path, debug=False, save_path=None):
+def plot_contours_with_probabilities(features_list, image, rf_path, threshold = 0.7, debug=False, save_path=None):
     """
     
     :param features_list: List of dictionaries with individual feature entries (including predicted labels and probabilities).
@@ -656,34 +658,39 @@ def plot_contours_with_probabilities(features_list, image, rf_path, debug=False,
     # Create a copy of the image to draw on
     image_copy = image.copy()
     #image_copy = cv2.cvtColor(image_copy, cv2.COLOR_BGR2RGB)
-
-    rf_name = os.path.basename(rf_path)
-    
+    if rf_path is not None:
+        rf_name = os.path.basename(rf_path)
+    else:
+        rf_name = "Not avail."
+        
     # Iterate over features_list to draw contours
     for feature in features_list:
         contour = feature["Contour"]
         predicted_label = feature["Predicted Label"]
-
         predicted_probability = feature["Predicted Probability"]
-        #centroid
-        (cx, cy) = feature["Centroid"]
-        if predicted_probability > 0.7:
+        centroid = feature["Centroid"]
+        cx, cy = centroid
+        
+        if predicted_probability > threshold:
             cv2.drawContours(image_copy, [contour], -1, label_colors.get(predicted_label, (255, 255, 255)), thick)
             cv2.drawMarker(image_copy, (cx, cy), (0, 0, 0), markerType=cv2.MARKER_CROSS, markerSize=25, thickness=thick)
         else:
             # Draw a solid contour
             cv2.drawContours(image_copy, [contour], -1, label_colors.get(predicted_label, (255, 255, 255)), thick)
-
+        
     if True:
         # Create the legend manually
         legend_patches = []
         for label, color in label_colors.items():
             patch = plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=np.array(color)/255, markersize=10, label=f'{label}')
             legend_patches.append(patch)
-        
-        # Add cross marker to legend
-        cross_marker = plt.Line2D([0], [0], marker='+', color='black', linestyle="None", markersize=5, label="Prediction Probability >70%")
-        legend_patches.append(cross_marker)
+            
+        #Add Prediction Threshold INfo
+        legend_patches.append(
+        plt.Line2D([0], [0], marker='+', color='black',
+                   linestyle="None", markersize=7,
+                   label=f"Prediction Probability ≥ {threshold:.2f}"))
+       
 
         #Add RF info
         rf_info = plt.Line2D([0], [0], linestyle='None', label=f'Random Forest: {rf_name}')
@@ -699,7 +706,6 @@ def plot_contours_with_probabilities(features_list, image, rf_path, debug=False,
         plt.axis('off')
 
         if save_path:
-            # Save the figure to a file if save_path is provided
             plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1, dpi=300)  
         elif debug:
             plt.show()
@@ -860,9 +866,60 @@ def resize_image_oom(image, max_side_length=5000):
         print(f"Failed to resize image, not bigger than max side length {max_side_length}")
         return image
 
+def parse_centroid(value):
+    if value is None or pd.isna(value):
+        return None
+
+    if isinstance(value, str):
+        value = value.strip("()[]")
+        parts = value.replace(" ", "").split(",")
+        return tuple(map(int, map(float, parts[:2])))
+
+    if isinstance(value, (list, tuple, np.ndarray)):
+        arr = np.array(value).reshape(-1)
+        return tuple(map(int, arr[:2]))
+
+    raise ValueError(f"Unsupported centroid format: {value}")
+
+
+def parse_contour(value):
+    if value is None or pd.isna(value):
+        return None
+
+    # Already a numpy contour
+    if isinstance(value, np.ndarray):
+        return value.astype(np.int32)
+
+    if isinstance(value, str):
+        # Extract all integer pairs
+        pairs = re.findall(r"\[\s*(\d+)\s+(\d+)\s*\]", value)
+
+        if not pairs:
+            raise ValueError(f"Invalid contour format:\n{value}")
+
+        contour = np.array(pairs, dtype=np.int32)
+        contour = contour.reshape(-1, 1, 2)
+        return contour
+
+    raise ValueError(f"Unsupported contour format: {type(value)}")
+    
+def normalize_geometry_columns(df):
+    df = df.copy()
+
+    if "Centroid" in df.columns:
+        df["Centroid"] = df["Centroid"].apply(parse_centroid)
+
+    if "Contour" in df.columns:
+        df["Contour"] = df["Contour"].apply(parse_contour)
+
+    return df
+
+
+
 def regenerate_summary_from_parameters(csv_path, selected_features):
 
     df = pd.read_csv(csv_path)
+    df = normalize_geometry_columns(df)
     summary = []
     
     # Infer feature columns if not provided
@@ -1029,7 +1086,6 @@ def build_categorical_summary(
     pandas.DataFrame
         Categorical summary table.
     """
-
     if not os.path.exists(feature_csv_path):
         print(f"ERROR: feature CSV not found → {feature_csv_path}")
         return None
@@ -1058,6 +1114,7 @@ def build_categorical_summary(
         .mean()
         .reset_index()
     )
+    
     categorical_summary_df = grouped.copy()
 
     # Write to Excel (append or replace sheet)
@@ -1075,8 +1132,143 @@ def build_categorical_summary(
         print(f"Categorical summary saved to '{sheet_name}' in {excel_summary_path}")
     except Exception as e:
         print(f"ERROR while writing categorical summary: {e}")
+        
+def confirm_image_directory(summary_path):
+    """
+    Confirms or requests the directory containing input images.
 
-def create_high_confidence_summary(all_parameters_df, summary_path, selected_features=None):
+    Returns
+    -------
+    str or None
+        Path to image directory, or None if user chooses to skip image processing.
+    """
+
+    inferred_dir = os.path.abspath(os.path.join(summary_path, "../.."))
+
+    print("\nImage directory selection")
+    print(f"Inferred directory:\n  {inferred_dir}")
+
+    while True:
+        choice = input(
+            "\nUse this directory for input images?\n"
+            "  [y] yes\n"
+            "  [n] no, enter another path\n"
+            "  [s] skip image generation\n"
+            "Choice (y/n/s): "
+        ).strip().lower()
+
+        if choice == "y":
+            if os.path.isdir(inferred_dir):
+                return inferred_dir
+            else:
+                print("Inferred directory does not exist.")
+
+        elif choice == "n":
+            while True:
+                new_dir = input(
+                    "Enter full path to image directory "
+                    "(or type 's' to skip): "
+                ).strip()
+
+                if new_dir.lower() == "s":
+                    print("Image generation skipped.")
+                    return None
+
+                if os.path.isdir(new_dir):
+                    return new_dir
+                else:
+                    print(f"Directory not found: {new_dir}")
+
+        elif choice == "s":
+            print("Image generation skipped.")
+            return None
+
+        else:
+            print("Invalid choice. Please enter y, n, or s.")
+
+def find_image_by_name(image_dir, image_name):
+    """
+    Finds an image file in image_dir matching image_name regardless of extension.
+
+    Parameters
+    ----------
+    image_dir : str
+        Directory containing images
+    image_name : str
+        Image name from CSV (with or without extension)
+
+    Returns
+    -------
+    Path or None
+        Path to matched image file, or None if not found / ambiguous
+    """
+    image_dir = Path(image_dir)
+
+    # Remove extension if user already provided one
+    stem = Path(image_name).stem
+    matches = list(image_dir.glob(f"{stem}.*"))
+
+    # Filter to common image extensions only
+    valid_exts = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}
+    matches = [m for m in matches if m.suffix.lower() in valid_exts]
+    
+    if len(matches) == 1:
+        return matches[0]
+
+    if len(matches) > 1:
+        print(f"Multiple image matches for '{stem}':")
+        for m in matches:
+            print(f"   - {m.name}")
+        print("   Using the first match.")
+        return matches[0]
+
+    print(f"No image found for '{stem}'")
+    return None
+
+def generate_threshold_images(
+    filtered_df,
+    image_dir,
+    output_dir,
+    rf_path,
+    threshold):
+    
+    os.makedirs(output_dir, exist_ok=True)
+
+    for image_name, group in filtered_df.groupby("Image Name"):
+        image_path = find_image_by_name(image_dir, image_name)
+
+        if image_path is None:
+            continue
+
+        image = cv2.imread(image_path)
+        
+        h, w = image.shape[:2]
+        if max(h, w) > 9000:
+            scale = 9000 / max(h, w)
+            image = cv2.resize(image, (int(w * scale), int(h * scale)), cv2.INTER_AREA)
+        
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        if image is None:
+            print(f"Failed to load image: {image_path}")
+            continue
+
+        features_list = group.to_dict(orient="records")
+
+        save_path = os.path.join(
+            output_dir,
+            f"{os.path.splitext(image_name)[0]}_thr_{threshold:.2f}.png"
+        )
+
+        img_contours = plot_contours_with_probabilities(
+            features_list=features_list,
+            image=image,
+            rf_path=rf_path,
+            threshold=threshold,
+            save_path=save_path
+        )
+
+def create_high_confidence_summary(all_parameters_df, summary_path, rf_path=None, selected_features=None):
     """
     Asks user if they want an additional threshold-based summary.
     If yes, filter all_parameters_df by Predicted Probability and create
@@ -1113,6 +1305,22 @@ def create_high_confidence_summary(all_parameters_df, summary_path, selected_fea
     if filtered.empty:
         print(f"No rows with Predicted Probability >= {threshold}")
         return
+        
+    image_dir = confirm_image_directory(summary_path)
+
+    if image_dir is None:
+        print("Image generation skipped by user.")
+    else:
+        output_dir = os.path.join(image_dir, "out/predicted_images_threshold")
+        print(f"Output directory for contour images with threshold: {output_dir}")
+
+        generate_threshold_images(
+            filtered_df=filtered,
+            image_dir=image_dir,
+            output_dir=output_dir,
+            rf_path=rf_path,
+            threshold=threshold
+        )
 
     # Build a refined summary similar to your main summary
     summary_rows = []
@@ -1162,6 +1370,8 @@ def create_high_confidence_summary(all_parameters_df, summary_path, selected_fea
         summary_rows.append(row)
 
     summary_df = pd.DataFrame(summary_rows).sort_values(by="Image Name")
+    
+    print(summary_df.head())
 
     # Write summary to Excel
     try:
@@ -1188,8 +1398,6 @@ def create_high_confidence_summary(all_parameters_df, summary_path, selected_fea
 
     except Exception as e:
         print(f"Failed to write high-confidence summary: {e}")
-
-
 
     
 def classify_seeds_in_folder(
@@ -1239,7 +1447,7 @@ def classify_seeds_in_folder(
             if img is None:
                 print(f"Failed to load: {image_path}")
                 continue
-
+            
             # Resize if extremely large
             h, w = img.shape[:2]
             if max(h, w) > 9000:
@@ -1280,7 +1488,6 @@ def classify_seeds_in_folder(
                         else:
                             print(f"Warning: Feature '{feat}' missing.")
                 else:
-                    print("find")
                     selected_features = [
                         c for c in features_df.columns
                         if c not in ["Image Name", "Predicted Label", "Contour", "Centroid", "Bounding Box", "Label"]
@@ -1403,13 +1610,15 @@ def classify_seeds_in_folder(
     if summary_path and not segmentation_only:
         try:
             build_categorical_summary(params_path, summary_path, selected_features)
-            create_high_confidence_summary(params_df, summary_path, selected_features)
         except Exception as e:
-            print("Error creating additional summaries:", e)
+            print("Error creating categorical summary:", e)
+            
+        try:
+            create_high_confidence_summary(params_df, summary_path, rf_path=rf_model_path, selected_features=selected_features)
+        except Exception as e:
+            print("Error creating high confidence summary:", e)
 
     print(f"\nTotal execution time: {total_time:.2f}s")
-
-
     
 
 def main():
