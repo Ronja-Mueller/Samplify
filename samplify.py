@@ -648,9 +648,9 @@ def plot_contours_with_probabilities(features_list, image, rf_path, debug=False,
     
     # Define colors for each label
     label_colors = {
-        "Fully Collapsed": (255, 0, 0),    # Red for Aborted
-        "Partially Collapsed": (0, 0, 255),  # Blue for Partially
-        "Normal": (0, 255, 0),     # Green for Normal
+        "Fully Collapsed": (220, 38, 127),    # Magenta for Aborted --> IBM design library
+        "Partially Collapsed": (100, 143, 255),  # light blue for Partially --> IBM design library
+        "Normal": (255, 176, 0),     # medium organge --> IBM design library
     }
     
     # Create a copy of the image to draw on
